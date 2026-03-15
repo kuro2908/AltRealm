@@ -1,9 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom";
+import { onAuthStateChanged } from "firebase/auth";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { auth } from "./lib/firebase";
 import AuthPage from "./pages/AuthPage";
 import Dashboard from "./pages/Dashboard";
 import StoryEditor from "./pages/StoryEditor";
@@ -17,25 +19,47 @@ import { applyTheme } from "./lib/themes";
 
 const queryClient = new QueryClient();
 
+// Redirect to /auth if not logged in
+function PrivateRoute({ children }: { children: React.ReactNode }) {
+  if (!auth.currentUser) return <Navigate to="/auth" replace />;
+  return <>{children}</>;
+}
+
 const router = createBrowserRouter([
   { path: "/", element: <Navigate to="/auth" replace /> },
   { path: "/auth", element: <AuthPage /> },
-  { path: "/dashboard", element: <Dashboard /> },
-  { path: "/editor/:id", element: <StoryEditor /> },
+  { path: "/dashboard", element: <PrivateRoute><Dashboard /></PrivateRoute> },
+  { path: "/editor/:id", element: <PrivateRoute><StoryEditor /></PrivateRoute> },
   { path: "/reader/:id", element: <ReaderMode /> },
   { path: "/explore/:id", element: <StoryExplore /> },
-  { path: "/community", element: <CommunityFeed /> },
-  { path: "/settings", element: <Settings /> },
+  { path: "/community", element: <PrivateRoute><CommunityFeed /></PrivateRoute> },
+  { path: "/settings", element: <PrivateRoute><Settings /></PrivateRoute> },
   { path: "*", element: <NotFound /> },
 ]);
 
 const App = () => {
-  // Restore saved theme on every app load
+  const [authReady, setAuthReady] = useState(false);
+
   useEffect(() => {
-    db.getUser().then((user) => {
-      if (user?.bgTheme) applyTheme(user.bgTheme);
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        db.getUser().then((userData) => {
+          if (userData?.bgTheme) applyTheme(userData.bgTheme);
+        });
+      }
+      setAuthReady(true);
     });
+    return unsub;
   }, []);
+
+  // Wait for Firebase to check auth state before rendering routes
+  if (!authReady) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
