@@ -13,27 +13,28 @@ import ReaderMode from "./pages/ReaderMode";
 import StoryExplore from "./pages/StoryExplore";
 import CommunityFeed from "./pages/CommunityFeed";
 import Settings from "./pages/Settings";
+import AdminPage from "./pages/AdminPage";
 import NotFound from "./pages/NotFound";
 import { db } from "./lib/utils";
 import { applyTheme } from "./lib/themes";
 
 const queryClient = new QueryClient();
 
-// Redirect to /auth if not logged in
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   if (!auth.currentUser) return <Navigate to="/auth" replace />;
   return <>{children}</>;
 }
 
 const router = createBrowserRouter([
-  { path: "/", element: <Navigate to="/auth" replace /> },
+  { path: "/", element: <Navigate to="/community" replace /> },
   { path: "/auth", element: <AuthPage /> },
+  { path: "/community", element: <CommunityFeed /> },               // public
+  { path: "/reader/:id", element: <ReaderMode /> },                  // public
+  { path: "/explore/:id", element: <StoryExplore /> },               // public
   { path: "/dashboard", element: <PrivateRoute><Dashboard /></PrivateRoute> },
   { path: "/editor/:id", element: <PrivateRoute><StoryEditor /></PrivateRoute> },
-  { path: "/reader/:id", element: <ReaderMode /> },
-  { path: "/explore/:id", element: <StoryExplore /> },
-  { path: "/community", element: <PrivateRoute><CommunityFeed /></PrivateRoute> },
   { path: "/settings", element: <PrivateRoute><Settings /></PrivateRoute> },
+  { path: "/admin", element: <PrivateRoute><AdminPage /></PrivateRoute> },
   { path: "*", element: <NotFound /> },
 ]);
 
@@ -52,7 +53,6 @@ const App = () => {
     return unsub;
   }, []);
 
-  // Wait for Firebase to check auth state before rendering routes
   if (!authReady) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">

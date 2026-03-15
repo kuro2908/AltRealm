@@ -126,7 +126,7 @@ export default function StoryEditor() {
     const words = nodes.reduce((a, n) => a + (n.content ? n.content.split(/\s+/).length : 0), 0);
     const endings = nodes.filter(n => n.isEnding || n.choices.length === 0).length;
     const idx = myStories.findIndex((s: any) => s.id === storyId);
-    const entry = { id: storyId, title: storyTitle, lastEdited: "Just now", status: "draft", branches: nodes.length, words, endings };
+    const entry = { id: storyId, title: storyTitle, lastEdited: "Vừa xong", status: "draft", branches: nodes.length, words, endings };
     if (idx === -1) myStories.push(entry);
     else Object.assign(myStories[idx], entry);
     await db.saveMyStories(myStories);
@@ -332,19 +332,21 @@ export default function StoryEditor() {
           />
           <div className="flex items-center gap-1.5 ml-2">
             <span className={`w-2 h-2 rounded-full ${saveStatus === "saved" ? "bg-primary" : saveStatus === "saving" ? "bg-muted-foreground animate-pulse" : "bg-destructive animate-pulse"}`} />
-            <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-widest">{saveStatus}</span>
+            <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-widest">
+              {saveStatus === "saved" ? "Đã lưu" : saveStatus === "saving" ? "Đang lưu" : "Chưa lưu"}
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <Link to={`/reader/${id}`} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm text-muted-foreground hover:bg-secondary transition-sw">
-            <Eye className="h-3.5 w-3.5" /> Preview
+            <Eye className="h-3.5 w-3.5" /> Xem trước
           </Link>
           <button
             onClick={handleSave}
             disabled={saveStatus === "saving"}
             className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-foreground text-background text-sm font-medium hover:opacity-90 transition-sw disabled:opacity-50"
           >
-            <Save className="h-3.5 w-3.5" /> {saveStatus === "saving" ? "Saving..." : "Save"}
+            <Save className="h-3.5 w-3.5" /> {saveStatus === "saving" ? "Đang lưu..." : "Lưu"}
           </button>
         </div>
       </div>
@@ -420,12 +422,12 @@ export default function StoryEditor() {
                   <div className="absolute -top-2.5 left-2 flex gap-1 z-10">
                     {isStart && (
                       <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary text-primary-foreground">
-                        Start
+                        Bắt đầu
                       </span>
                     )}
                     {isEnding && (
                       <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-500 text-white">
-                        Ending
+                        Kết thúc
                       </span>
                     )}
                   </div>
@@ -483,7 +485,7 @@ export default function StoryEditor() {
                     Phân đoạn {selectedNode.label}
                   </span>
                   {autoStartIds.has(selectedNode.id) && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-semibold uppercase tracking-wide">Start</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-semibold uppercase tracking-wide">Bắt đầu</span>
                   )}
                 </div>
                 <button onClick={() => setSelectedId(null)} className="p-1 rounded-md hover:bg-secondary transition-sw text-muted-foreground">

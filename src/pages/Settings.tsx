@@ -119,6 +119,14 @@ export default function Settings() {
             </div>
           </section>
 
+          {/* Support */}
+          <p className="text-sm text-muted-foreground/60">
+            Nếu cần bất kì hỗ trợ gì, hãy liên hệ{" "}
+            <a href="mailto:minhvu2908b@gmail.com" className="text-primary hover:underline">
+              minhvu2908b@gmail.com
+            </a>
+          </p>
+
           {/* Save button */}
           <div className="flex items-center justify-end gap-3">
             {saved && (

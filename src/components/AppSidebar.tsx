@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { BookOpen, Users, Settings, Plus, ChevronLeft, LayoutGrid, LogOut } from "lucide-react";
+import { BookOpen, Users, Settings, Plus, ChevronLeft, LayoutGrid, LogOut, Shield } from "lucide-react";
 import { db } from "@/lib/utils";
 
 const navItems = [
-  { label: "My Stories", icon: BookOpen, path: "/dashboard" },
-  { label: "Community Feed", icon: Users, path: "/community" },
-  { label: "Settings", icon: Settings, path: "/settings" },
+  { label: "Truyện của tôi", icon: BookOpen, path: "/dashboard" },
+  { label: "Cộng đồng", icon: Users, path: "/community" },
+  { label: "Cài đặt", icon: Settings, path: "/settings" },
 ];
 
 export function AppSidebar() {
@@ -36,7 +36,7 @@ export function AppSidebar() {
     };
     await db.saveStoryNodes(storyId, [initialNode]);
     await db.saveMyStories([...existingStories, {
-      id: storyId, title: storyName, lastEdited: "Just now",
+      id: storyId, title: storyName, lastEdited: "Vừa xong",
       status: "draft", branches: 1, words: 0, endings: 1
     }]);
     navigate(`/editor/${storyId}`);
@@ -76,7 +76,7 @@ export function AppSidebar() {
             }`}
         >
           <Plus className="h-4 w-4" />
-          {!collapsed && <span className="text-sm font-medium">New Story</span>}
+          {!collapsed && <span className="text-sm font-medium">Truyện mới</span>}
         </button>
       </div>
 
@@ -99,6 +99,19 @@ export function AppSidebar() {
             </Link>
           );
         })}
+        {user?.isAdmin && (
+          <Link
+            to="/admin"
+            className={`flex items-center gap-3 rounded-lg transition-sw ${collapsed ? "justify-center p-2.5" : "px-3 py-2"
+              } ${location.pathname.startsWith("/admin")
+                ? "bg-secondary text-foreground font-medium"
+                : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+              }`}
+          >
+            <Shield className="h-4 w-4 flex-shrink-0" />
+            {!collapsed && <span className="text-sm">Quản trị</span>}
+          </Link>
+        )}
       </nav>
 
       <div className="p-3 mb-4">

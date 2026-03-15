@@ -86,7 +86,7 @@ export function StoryCard({
             status === "published" ? "text-primary" : "text-muted-foreground"
           }`}
         >
-          {status}
+          {status === "published" ? "Đã đăng" : "Nháp"}
         </span>
         <div className="relative" ref={menuRef}>
           <button
@@ -143,14 +143,14 @@ export function StoryCard({
           {title}
         </h3>
         <p className="text-xs text-muted-foreground mb-3">
-          Edited {lastEdited}
+          Chỉnh sửa {lastEdited}
         </p>
         <div className="flex items-center gap-3 text-[10px] font-mono tracking-wider uppercase text-muted-foreground tabular-nums">
-          <span>{branches} Branches</span>
+          <span>{branches} Nhánh</span>
           <span>·</span>
-          <span>{words.toLocaleString()} Words</span>
+          <span>{words.toLocaleString()} Từ</span>
           <span>·</span>
-          <span>{endings} Endings</span>
+          <span>{endings} Kết thúc</span>
         </div>
       </div>
     </motion.div>

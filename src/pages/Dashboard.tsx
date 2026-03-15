@@ -25,7 +25,7 @@ export default function Dashboard() {
     };
     await db.saveStoryNodes(storyId, [initialNode]);
     await db.saveMyStories([...existingStories, {
-      id: storyId, title: storyName, lastEdited: "Just now",
+      id: storyId, title: storyName, lastEdited: "Vừa xong",
       status: "draft", branches: 1, words: 0, endings: 1
     }]);
     navigate(`/editor/${storyId}`);
@@ -60,6 +60,11 @@ export default function Dashboard() {
 
     const feed = await db.getFeed() || [];
     if (newStatus === "published") {
+      const currentUser = await db.getUser();
+      if (currentUser?.banned) {
+        alert("Tài khoản của bạn đã bị cấm đăng truyện lên cộng đồng.");
+        return;
+      }
       if (!feed.find((f: any) => f.id === storyId)) {
         const [user, nodes] = await Promise.all([db.getUser(), db.getStoryNodes(storyId)]);
         const firstContent: string = nodes?.[0]?.content || "";
@@ -88,10 +93,10 @@ export default function Dashboard() {
       <div className="p-8 max-w-6xl">
         <div className="mb-8">
           <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-            My Stories
+            Truyện của tôi
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Map the multiverse of your narrative.
+            Khám phá vũ trụ câu chuyện của bạn.
           </p>
         </div>
 
@@ -123,8 +128,8 @@ export default function Dashboard() {
                 <Plus className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-sw" />
               </div>
               <p className="text-xs text-muted-foreground text-center px-6 leading-relaxed">
-                Every epic begins with
-                <br />a single branch.
+                Mọi câu chuyện lớn đều bắt đầu
+                <br />từ một nhánh.
               </p>
             </div>
           </motion.div>

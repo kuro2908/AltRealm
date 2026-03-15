@@ -12,6 +12,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  deleteDoc,
   collection,
   query,
   where,
@@ -23,15 +24,6 @@ import { auth, firestore } from "./firebase";
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
-
-// ─── Firestore data structure ───────────────────────────────────────────────
-// users/{uid}                       → { email, displayName, bgTheme }
-// stories/{storyId}                 → { id, title, ..., authorId }
-// nodes/{storyId}                   → { data: [...] }
-// feed/{storyId}                    → { id, title, upvotedBy[], ... }
-// comments/{storyId}                → { data: [...] }
-// explore/{uid}_{storyId}           → { revealed[], chosenAt{} }
-// ────────────────────────────────────────────────────────────────────────────
 
 function uid(): string {
   const user = auth.currentUser;
@@ -92,7 +84,13 @@ export const db = {
   // ── Community feed ────────────────────────────────────────────────────────
   async getFeed() {
     const snap = await getDocs(collection(firestore, "feed"));
-    return snap.docs.map(d => d.data());
+    // Filter out hidden stories for regular users
+    return snap.docs.map(d => d.data()).filter((s: any) => !s.hidden);
+  },
+
+  async getFeedItem(storyId: string) {
+    const snap = await getDoc(doc(firestore, "feed", storyId));
+    return snap.exists() ? snap.data() : null;
   },
 
   async saveFeed(data: any[]) {
@@ -106,8 +104,9 @@ export const db = {
 
   // ── My stories ────────────────────────────────────────────────────────────
   async getMyStories() {
-    const authorId = uid();
-    const q = query(collection(firestore, "stories"), where("authorId", "==", authorId));
+    const user = auth.currentUser;
+    if (!user) return [];  // Safe for guests
+    const q = query(collection(firestore, "stories"), where("authorId", "==", user.uid));
     const snap = await getDocs(q);
     return snap.docs.map(d => d.data());
   },
@@ -135,14 +134,18 @@ export const db = {
     await setDoc(doc(firestore, "nodes", storyId), { data: nodes });
   },
 
-  // ── Explore state (fog-of-war) ────────────────────────────────────────────
+  // ── Explore state ─────────────────────────────────────────────────────────
   async getExploreState(storyId: string) {
-    const snap = await getDoc(doc(firestore, "explore", `${uid()}_${storyId}`));
+    const user = auth.currentUser;
+    if (!user) return null;  // Guests: no saved state
+    const snap = await getDoc(doc(firestore, "explore", `${user.uid}_${storyId}`));
     return snap.exists() ? snap.data() : null;
   },
 
   async saveExploreState(storyId: string, data: { revealed: string[]; chosenAt: Record<string, number[]> }) {
-    await setDoc(doc(firestore, "explore", `${uid()}_${storyId}`), data);
+    const user = auth.currentUser;
+    if (!user) return;  // Guests: silently skip
+    await setDoc(doc(firestore, "explore", `${user.uid}_${storyId}`), data);
   },
 
   // ── Comments ──────────────────────────────────────────────────────────────
@@ -153,5 +156,29 @@ export const db = {
 
   async saveComments(storyId: string, comments: any[]) {
     await setDoc(doc(firestore, "comments", storyId), { data: comments });
+  },
+
+  // ── Admin ─────────────────────────────────────────────────────────────────
+  async getAllUsers() {
+    const snap = await getDocs(collection(firestore, "users"));
+    return snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+  },
+
+  async banUser(userId: string, banned: boolean) {
+    await setDoc(doc(firestore, "users", userId), { banned }, { merge: true });
+  },
+
+  async getAllFeed() {
+    // Admin version: returns all including hidden
+    const snap = await getDocs(collection(firestore, "feed"));
+    return snap.docs.map(d => d.data());
+  },
+
+  async hideFeedStory(storyId: string, hidden: boolean) {
+    await setDoc(doc(firestore, "feed", storyId), { hidden }, { merge: true });
+  },
+
+  async deleteFeedStory(storyId: string) {
+    await deleteDoc(doc(firestore, "feed", storyId));
   },
 };
