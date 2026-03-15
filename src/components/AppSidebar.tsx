@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { BookOpen, Users, Settings, Plus, ChevronLeft, LayoutGrid, LogOut, Shield } from "lucide-react";
+import { BookOpen, Users, Settings, Plus, ChevronLeft, LogOut, Shield } from "lucide-react";
 import { db } from "@/lib/utils";
 
 const navItems = [
@@ -52,9 +52,9 @@ export function AppSidebar() {
       <div className="flex items-center justify-between px-4 h-14">
         {!collapsed && (
           <Link to="/dashboard" className="flex items-center gap-2">
-            <LayoutGrid className="h-5 w-5 text-primary" />
+            <img src="/AltrealmLogo.png" alt="AltRealm" className="h-6 w-6 object-contain" />
             <span className="text-sm font-semibold text-foreground tracking-tight">
-              StoryWeaver
+              AltRealm
             </span>
           </Link>
         )}
