@@ -24,6 +24,24 @@ export function AppSidebar() {
     navigate("/auth");
   };
 
+  const handleNewStory = async () => {
+    const existingStories = await db.getMyStories() || [];
+    const storyNumber = existingStories.length + 1;
+    const storyId = `story_${Date.now()}`;
+    const storyName = `Truyện số ${storyNumber}`;
+    const initialNode = {
+      id: "1.0", label: "1.0",
+      title: "Mở đầu",
+      content: "", x: 400, y: 80, choices: []
+    };
+    await db.saveStoryNodes(storyId, [initialNode]);
+    await db.saveMyStories([...existingStories, {
+      id: storyId, title: storyName, lastEdited: "Just now",
+      status: "draft", branches: 1, words: 0, endings: 1
+    }]);
+    navigate(`/editor/${storyId}`);
+  };
+
   return (
     <aside
       className={`h-screen sticky top-0 flex flex-col bg-card transition-sw ${collapsed ? "w-16" : "w-60"
@@ -52,14 +70,14 @@ export function AppSidebar() {
 
       {/* New Story */}
       <div className="px-3 mt-2">
-        <Link
-          to="/editor/new"
-          className={`flex items-center gap-2 rounded-lg bg-primary text-primary-foreground transition-sw hover:opacity-90 ${collapsed ? "justify-center p-2.5" : "px-3 py-2"
+        <button
+          onClick={handleNewStory}
+          className={`flex items-center gap-2 rounded-lg bg-primary text-primary-foreground transition-sw hover:opacity-90 w-full ${collapsed ? "justify-center p-2.5" : "px-3 py-2"
             }`}
         >
           <Plus className="h-4 w-4" />
           {!collapsed && <span className="text-sm font-medium">New Story</span>}
-        </Link>
+        </button>
       </div>
 
       {/* Nav */}
@@ -88,10 +106,10 @@ export function AppSidebar() {
           onClick={handleLogout}
           className={`flex items-center gap-3 w-full rounded-lg transition-sw text-muted-foreground hover:bg-secondary hover:text-foreground ${collapsed ? "justify-center p-2.5" : "px-3 py-2"
             }`}
-          title={user?.email || "Logout"}
+          title={user?.displayName || user?.email || "Logout"}
         >
           <LogOut className="h-4 w-4 flex-shrink-0" />
-          {!collapsed && <span className="text-sm truncate">{user?.email || "Logout"}</span>}
+          {!collapsed && <span className="text-sm truncate">{user?.displayName || user?.email || "Logout"}</span>}
         </button>
       </div>
     </aside>

@@ -17,6 +17,9 @@ export const db = {
     const user = localStorage.getItem("sw_user");
     return user ? JSON.parse(user) : null;
   },
+  async saveUser(data: any) {
+    localStorage.setItem("sw_user", JSON.stringify(data));
+  },
   async getFeed() {
     const feed = localStorage.getItem("sw_feed");
     return feed ? JSON.parse(feed) : null;
@@ -37,5 +40,19 @@ export const db = {
   },
   async saveStoryNodes(storyId: string, nodes: any) {
     localStorage.setItem(`sw_nodes_${storyId}`, JSON.stringify(nodes));
-  }
+  },
+  async getExploreState(storyId: string) {
+    const s = localStorage.getItem(`sw_explore_${storyId}`);
+    return s ? JSON.parse(s) : null;
+  },
+  async saveExploreState(storyId: string, data: { revealed: string[]; chosenAt: Record<string, number[]> }) {
+    localStorage.setItem(`sw_explore_${storyId}`, JSON.stringify(data));
+  },
+  async getComments(storyId: string) {
+    const s = localStorage.getItem(`sw_comments_${storyId}`);
+    return s ? JSON.parse(s) : [];
+  },
+  async saveComments(storyId: string, comments: any[]) {
+    localStorage.setItem(`sw_comments_${storyId}`, JSON.stringify(comments));
+  },
 };

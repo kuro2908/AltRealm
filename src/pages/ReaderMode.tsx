@@ -1,143 +1,261 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { ArrowLeft, BookOpen, Check, Map } from "lucide-react";
 import { db } from "@/lib/utils";
 
-interface Segment {
+interface StoryNode {
   id: string;
+  title: string;
   content: string;
+  isEnding?: boolean;
   choices: { text: string; targetId: string }[];
 }
 
-const storySegments: Record<string, Segment> = {
-  "1.0": {
-    id: "1.0",
-    content:
-      "You stand at the entrance of an ancient library. Dust motes dance in shafts of golden light filtering through cracked stained glass windows. The air smells of old paper and forgotten secrets.\n\nTwo corridors stretch before you—one leading deeper into darkness, the other toward a faint, pulsing glow.",
-    choices: [
-      { text: "Enter the dark corridor", targetId: "1.1" },
-      { text: "Follow the glowing light", targetId: "1.2" },
-    ],
-  },
-  "1.1": {
-    id: "1.1",
-    content:
-      "The corridor narrows with each step. Your footsteps echo against stone walls lined with shelves of leather-bound volumes that seem to breathe in the flickering torchlight.\n\nA whisper follows you—not threatening, but insistent. It speaks a language you almost understand, tugging at the edges of memory.\n\nThen you see it: a single book, glowing faintly on a pedestal at the corridor's end.",
-    choices: [
-      { text: "Open the glowing book", targetId: "1.3" },
-      { text: "Turn back to the entrance", targetId: "1.0" },
-    ],
-  },
-  "1.2": {
-    id: "1.2",
-    content:
-      "The light intensifies as you enter a circular chamber carved from white stone. In its center, a crystalline orb floats above a marble pedestal, casting prismatic reflections that dance across the domed ceiling like captured auroras.\n\nThe orb pulses steadily, as if breathing. As you approach, you feel warmth radiating from it—not heat, but something deeper. Recognition.",
-    choices: [
-      { text: "Touch the orb", targetId: "1.4" },
-      { text: "Examine the chamber walls", targetId: "1.0" },
-    ],
-  },
-  "1.3": {
-    id: "1.3",
-    content:
-      "The book falls open to a page that seems to read itself aloud—words rising from the parchment like smoke, curling through the air before dissolving.\n\nIt speaks of a prophecy: a traveler who would arrive at the library's darkest hour, someone who could reshape the very stories held within these walls.\n\nThe whispers around you grow louder, harmonious now. They are cheering.",
-    choices: [{ text: "Start over", targetId: "1.0" }],
-  },
-  "1.4": {
-    id: "1.4",
-    content:
-      "The moment your fingertips brush the crystal surface, visions flood your mind in an unstoppable cascade.\n\nYou see centuries compress: librarians in robes tending to infinite shelves, wars fought over forbidden knowledge, the library burning and rebuilding itself from its own ashes.\n\nAnd beneath it all—a hidden vault, sealed since the library's founding, waiting beneath the very floor on which you stand.\n\nThe orb dims. But now you know the way.",
-    choices: [{ text: "Start over", targetId: "1.0" }],
-  },
-};
-
-const transition = { duration: 0.2, ease: [0.2, 0.8, 0.2, 1] as const };
+const transition = { duration: 0.35, ease: [0.2, 0.8, 0.2, 1] as const };
 
 export default function ReaderMode() {
   const { id } = useParams();
-  const [currentId, setCurrentId] = useState("1.0");
-  const [direction, setDirection] = useState(1);
-  const [segments, setSegments] = useState<Record<string, Segment>>({});
+  const [searchParams] = useSearchParams();
+  const fromNode = searchParams.get("from");
+
+  const [segments, setSegments] = useState<Record<string, StoryNode>>({});
+  const [storyTitle, setStoryTitle] = useState("");
+  const [history, setHistory] = useState<{ nodeId: string; chosenIndex: number | null }[]>([]);
   const [loading, setLoading] = useState(true);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const prevLengthRef = useRef(0);
 
   useEffect(() => {
     let mounted = true;
-    const fetchStory = async () => {
-      let data = await db.getStoryNodes(id || "new");
-      if (!data) {
-        data = Object.values(storySegments);
-        await db.saveStoryNodes(id || "new", data);
+    const fetch = async () => {
+      const [data, stories] = await Promise.all([
+        db.getStoryNodes(id || ""),
+        db.getMyStories(),
+      ]);
+      if (!mounted) return;
+      if (data && data.length > 0) {
+        const map: Record<string, StoryNode> = {};
+        data.forEach((node: any) => { map[node.id] = node; });
+        setSegments(map);
+        const startId = (fromNode && map[fromNode]) ? fromNode : data[0].id;
+        setHistory([{ nodeId: startId, chosenIndex: null }]);
+        const story = stories?.find((s: any) => s.id === id);
+        if (story) setStoryTitle(story.title);
       }
-      if (mounted) {
-        const segmentMap: Record<string, Segment> = {};
-        data.forEach((node: any) => {
-          segmentMap[node.id] = node;
-        });
-        setSegments(segmentMap);
-        setCurrentId(data[0]?.id || "1.0");
-        setLoading(false);
-      }
+      setLoading(false);
     };
-    fetchStory();
+    fetch();
     return () => { mounted = false; };
-  }, [id]);
+  }, [id, fromNode]);
 
-  const segment = segments[currentId];
-  if (loading || !segment) return null;
+  // Scroll to bottom only when a new segment is appended
+  useEffect(() => {
+    if (history.length > prevLengthRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    prevLengthRef.current = history.length;
+  }, [history.length]);
 
-  const navigate = (targetId: string) => {
-    setDirection(1);
-    setCurrentId(targetId);
+  // Sync revealed nodes & choices back to explore state
+  const syncExplore = async (nodeId: string, choiceIdx: number, targetId: string) => {
+    if (!id) return;
+    const state = await db.getExploreState(id) ?? { revealed: [], chosenAt: {} };
+    const revealed: string[] = state.revealed ?? [];
+    const chosenAt: Record<string, number[]> = state.chosenAt ?? {};
+    if (!revealed.includes(nodeId)) revealed.push(nodeId);
+    if (!revealed.includes(targetId)) revealed.push(targetId);
+    const existing: number[] = chosenAt[nodeId] ?? [];
+    if (!existing.includes(choiceIdx)) chosenAt[nodeId] = [...existing, choiceIdx];
+    await db.saveExploreState(id, { revealed, chosenAt });
   };
 
+  const handleChoice = (histIdx: number, choiceIdx: number, targetId: string) => {
+    const nodeId = history[histIdx]?.nodeId;
+    if (nodeId) syncExplore(nodeId, choiceIdx, targetId);
+
+    setHistory(prev => {
+      if (
+        prev[histIdx]?.chosenIndex === choiceIdx &&
+        prev[histIdx + 1]?.nodeId === targetId
+      ) return prev;
+      const trunk = prev.slice(0, histIdx + 1).map((h, i) =>
+        i === histIdx ? { ...h, chosenIndex: choiceIdx } : h
+      );
+      return [...trunk, { nodeId: targetId, chosenIndex: null }];
+    });
+  };
+
+  const handleRestart = () => {
+    const firstId = Object.keys(segments)[0];
+    if (firstId) setHistory([{ nodeId: firstId, chosenIndex: null }]);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  if (loading) return null;
+
+  const lastItem = history[history.length - 1];
+  const lastNode = lastItem ? segments[lastItem.nodeId] : null;
+  const isEnded = lastNode && (lastNode.isEnding || lastNode.choices.length === 0);
+
+  const backTo = fromNode ? `/explore/${id}` : "/dashboard";
+
   return (
-    <div className="min-h-screen bg-card">
-      {/* Minimal header */}
-      <div className="fixed top-0 left-0 right-0 h-12 bg-card/80 backdrop-blur-sm z-10 flex items-center px-4" style={{ boxShadow: "0 1px 0 0 hsl(var(--border))" }}>
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <div
+        className="fixed top-0 left-0 right-0 h-12 bg-card/80 backdrop-blur-sm z-10 flex items-center px-4 gap-3"
+        style={{ boxShadow: "0 1px 0 0 hsl(var(--border))" }}
+      >
         <Link
-          to="/dashboard"
+          to={backTo}
           className="p-1.5 rounded-md hover:bg-secondary transition-sw text-muted-foreground"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-arrow-left h-4 w-4"><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></svg>
+          <ArrowLeft className="h-4 w-4" />
         </Link>
-        <span className="text-sm text-muted-foreground ml-3">
-          The Forgotten Archive
-        </span>
+        <span className="text-sm text-muted-foreground truncate flex-1">{storyTitle}</span>
+        {fromNode && (
+          <Link
+            to={`/explore/${id}`}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground/60 hover:text-foreground transition-sw flex-shrink-0"
+          >
+            <Map className="h-3.5 w-3.5" />
+            Bản đồ
+          </Link>
+        )}
       </div>
 
-      <div className="max-w-[65ch] mx-auto pt-[15vh] pb-24 px-6">
-        <AnimatePresence mode="wait" custom={direction}>
-          <motion.div
-            key={currentId}
-            custom={direction}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={transition}
-          >
-            {/* Content */}
-            <div className="font-prose text-xl leading-[1.7] text-foreground/90 whitespace-pre-line mb-12">
-              {segment.content}
-            </div>
+      <div className="max-w-[65ch] mx-auto pt-[15vh] pb-40 px-6">
+        {history.map((item, histIdx) => {
+          const node = segments[item.nodeId];
+          if (!node) return null;
+          const isLast = histIdx === history.length - 1;
 
-            {/* Choices */}
-            {segment.choices.length > 0 && (
-              <div className="space-y-3">
-                {segment.choices.map((choice, i) => (
+          return (
+            <div key={`${item.nodeId}-${histIdx}`}>
+              <motion.div
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={transition}
+              >
+                {node.title && (
+                  <p className="text-xs font-mono text-muted-foreground/40 tracking-widest uppercase mb-5">
+                    {node.title}
+                  </p>
+                )}
+
+                <div className="font-prose text-xl leading-[1.8] text-foreground/85 whitespace-pre-line mb-10">
+                  {node.content || (
+                    <span className="italic text-muted-foreground/40">Chưa có nội dung.</span>
+                  )}
+                </div>
+
+                {node.choices.length > 0 && (
+                  <div className="space-y-2.5 mb-4">
+                    {node.choices.map((choice, ci) => {
+                      const isChosen = item.chosenIndex === ci;
+
+                      if (isLast) {
+                        return (
+                          <button
+                            key={ci}
+                            onClick={() => handleChoice(histIdx, ci, choice.targetId)}
+                            className="group w-full text-left px-5 py-4 rounded-xl border border-border/50 bg-card hover:border-primary/30 hover:bg-primary/[0.03] text-foreground/75 hover:text-foreground transition-sw text-base"
+                          >
+                            <span className="font-medium">{choice.text}</span>
+                            <span className="ml-2 text-muted-foreground/40 text-sm group-hover:text-primary/60 transition-sw">
+                              →
+                            </span>
+                          </button>
+                        );
+                      }
+
+                      // Past segment — show all choices, chosen one highlighted
+                      return (
+                        <button
+                          key={ci}
+                          onClick={() => handleChoice(histIdx, ci, choice.targetId)}
+                          className={`group w-full text-left px-5 py-3.5 rounded-xl border transition-sw text-sm flex items-center gap-3 ${
+                            isChosen
+                              ? "border-primary/25 bg-primary/[0.04] text-foreground/70"
+                              : "border-border/30 bg-card/50 text-muted-foreground/45 hover:border-border/60 hover:text-muted-foreground hover:bg-card"
+                          }`}
+                        >
+                          <span
+                            className={`flex-shrink-0 w-4 h-4 rounded-full border flex items-center justify-center transition-sw ${
+                              isChosen
+                                ? "border-primary/60 bg-primary/15"
+                                : "border-border/50 group-hover:border-border"
+                            }`}
+                          >
+                            {isChosen && <Check className="h-2.5 w-2.5 text-primary/80" strokeWidth={3} />}
+                          </span>
+                          <span className="font-medium flex-1">{choice.text}</span>
+                          {!isChosen && (
+                            <span className="text-muted-foreground/25 text-xs group-hover:text-muted-foreground/50 transition-sw">
+                              chọn lại
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </motion.div>
+
+              {!isLast && (
+                <div className="flex items-center gap-4 my-14">
+                  <div className="flex-1 h-px bg-border/40" />
+                  <div className="flex gap-1.5">
+                    <span className="w-1 h-1 rounded-full bg-muted-foreground/20" />
+                    <span className="w-1 h-1 rounded-full bg-muted-foreground/20" />
+                    <span className="w-1 h-1 rounded-full bg-muted-foreground/20" />
+                  </div>
+                  <div className="flex-1 h-px bg-border/40" />
+                </div>
+              )}
+
+              {isLast && <div ref={bottomRef} />}
+            </div>
+          );
+        })}
+
+        <AnimatePresence>
+          {isEnded && (
+            <motion.div
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ ...transition, delay: 0.2 }}
+              className="mt-16 text-center"
+            >
+              <div className="inline-flex flex-col items-center gap-4 px-8 py-8 rounded-2xl border border-border/40 bg-card">
+                <BookOpen className="h-6 w-6 text-muted-foreground/40" />
+                <div>
+                  <p className="text-sm font-medium text-foreground/70">Kết thúc</p>
+                  <p className="text-xs text-muted-foreground/50 mt-1">
+                    Bạn đã đến cuối hành trình này.
+                  </p>
+                </div>
+                <div className="flex gap-2 mt-1">
                   <button
-                    key={i}
-                    onClick={() => navigate(choice.targetId)}
-                    className="group w-full text-left px-5 py-4 rounded-lg bg-secondary/30 hover:bg-secondary text-foreground/80 hover:text-primary transition-sw text-base"
+                    onClick={handleRestart}
+                    className="px-4 py-2 rounded-full bg-secondary text-foreground/70 text-sm hover:bg-secondary/80 transition-sw"
                   >
-                    <span className="font-medium">{choice.text}</span>
-                    <span className="ml-2 text-muted-foreground/50 text-sm group-hover:text-primary/50 transition-sw">
-                      →
-                    </span>
+                    Đọc lại từ đầu
                   </button>
-                ))}
+                  {fromNode && (
+                    <Link
+                      to={`/explore/${id}`}
+                      className="px-4 py-2 rounded-full bg-secondary text-foreground/70 text-sm hover:bg-secondary/80 transition-sw flex items-center gap-1.5"
+                    >
+                      <Map className="h-3.5 w-3.5" /> Xem bản đồ
+                    </Link>
+                  )}
+                </div>
               </div>
-            )}
-          </motion.div>
+            </motion.div>
+          )}
         </AnimatePresence>
       </div>
     </div>
