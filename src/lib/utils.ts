@@ -75,8 +75,8 @@ export const db = {
     const user = auth.currentUser;
     if (!user) return null;
     const snap = await getDoc(doc(firestore, "users", user.uid));
-    if (!snap.exists()) return { email: user.email, displayName: user.displayName };
-    return snap.data();
+    if (!snap.exists()) return { uid: user.uid, email: user.email, displayName: user.displayName };
+    return { uid: user.uid, ...snap.data() };
   },
 
   async saveUser(data: any) {

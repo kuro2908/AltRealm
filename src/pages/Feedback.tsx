@@ -1,7 +1,7 @@
-import { DashboardLayout } from "@/components/DashboardLayout";
+﻿import { DashboardLayout } from "@/components/DashboardLayout";
 import { db } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
-import { CornerDownRight, LogIn, MessageSquare, Send } from "lucide-react";
+import { CornerDownRight, LogIn, MessageSquare, Pencil, Send, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -32,6 +32,10 @@ export default function Feedback() {
   const [input, setInput] = useState("");
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyInput, setReplyInput] = useState("");
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editInput, setEditInput] = useState("");
+  const [editingReply, setEditingReply] = useState<{ commentId: string; replyId: string } | null>(null);
+  const [editReplyInput, setEditReplyInput] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -63,6 +67,7 @@ export default function Feedback() {
     if (!text) return;
     const comment = {
       id: `f_${Date.now()}`,
+      authorId: currentUser.uid,
       author: currentUser.displayName || currentUser.email || "Ẩn danh",
       text,
       createdAt: new Date().toISOString(),
@@ -78,6 +83,7 @@ export default function Feedback() {
     if (!text) return;
     const reply = {
       id: `fr_${Date.now()}`,
+      authorId: currentUser.uid,
       author: currentUser.displayName || currentUser.email || "Ẩn danh",
       text,
       createdAt: new Date().toISOString(),
@@ -98,6 +104,82 @@ export default function Feedback() {
   };
 
   const canPost = currentUser && !currentUser.banned;
+  const canEdit = (item: any) => Boolean(currentUser && !currentUser.banned && item?.authorId && item.authorId === currentUser.uid);
+  const canDelete = (item: any) => Boolean(currentUser && !currentUser.banned && (currentUser.isAdmin || (item?.authorId && item.authorId === currentUser.uid)));
+
+  const startEditComment = (comment: any) => {
+    if (!canEdit(comment)) return;
+    setEditingCommentId(comment.id);
+    setEditInput(comment.text || "");
+    setEditingReply(null);
+    setEditReplyInput("");
+  };
+
+  const cancelEditComment = () => {
+    setEditingCommentId(null);
+    setEditInput("");
+  };
+
+  const saveEditedComment = async (commentId: string) => {
+    if (!currentUser || currentUser.banned) return;
+    const text = editInput.trim();
+    if (!text) return;
+    const updated = comments.map(c => c.id === commentId ? { ...c, text } : c);
+    setEditingCommentId(null);
+    setEditInput("");
+    await saveFeedback(updated);
+  };
+
+  const deleteComment = async (commentId: string) => {
+    const comment = comments.find(c => c.id === commentId);
+    if (!canDelete(comment)) return;
+    const updated = comments.filter(c => c.id !== commentId);
+    setEditingCommentId(null);
+    setEditingReply(null);
+    setEditInput("");
+    setEditReplyInput("");
+    await saveFeedback(updated);
+  };
+
+  const startEditReply = (commentId: string, reply: any) => {
+    if (!canEdit(reply)) return;
+    setEditingReply({ commentId, replyId: reply.id });
+    setEditReplyInput(reply.text || "");
+    setEditingCommentId(null);
+    setEditInput("");
+  };
+
+  const cancelEditReply = () => {
+    setEditingReply(null);
+    setEditReplyInput("");
+  };
+
+  const saveEditedReply = async (commentId: string, replyId: string) => {
+    if (!currentUser || currentUser.banned) return;
+    const text = editReplyInput.trim();
+    if (!text) return;
+    const updated = comments.map(c => {
+      if (c.id !== commentId) return c;
+      const replies = (c.replies || []).map((r: any) => r.id === replyId ? { ...r, text } : r);
+      return { ...c, replies };
+    });
+    setEditingReply(null);
+    setEditReplyInput("");
+    await saveFeedback(updated);
+  };
+
+  const deleteReply = async (commentId: string, replyId: string) => {
+    const comment = comments.find(c => c.id === commentId);
+    const reply = (comment?.replies || []).find((r: any) => r.id === replyId);
+    if (!canDelete(reply)) return;
+    const updated = comments.map(c => {
+      if (c.id !== commentId) return c;
+      return { ...c, replies: (c.replies || []).filter((r: any) => r.id !== replyId) };
+    });
+    setEditingReply(null);
+    setEditReplyInput("");
+    await saveFeedback(updated);
+  };
 
   return (
     <DashboardLayout>
@@ -169,18 +251,70 @@ export default function Feedback() {
                   <div className="flex gap-3">
                     <Avatar name={c.author} />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-baseline gap-2 mb-0.5">
-                        <span className="text-xs font-semibold text-foreground/80">{c.author}</span>
-                        <span className="text-[10px] text-muted-foreground/40">{timeAgo(c.createdAt)}</span>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-xs font-semibold text-foreground/80">{c.author}</span>
+                          <span className="text-[10px] text-muted-foreground/40">{timeAgo(c.createdAt)}</span>
+                        </div>
+                        {(canEdit(c) || canDelete(c)) && (
+                          <div className="flex items-center gap-2">
+                            {canEdit(c) && (
+                              <button
+                                onClick={() => startEditComment(c)}
+                                className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-foreground transition-sw"
+                              >
+                                <Pencil className="h-3 w-3" />
+                                Sửa
+                              </button>
+                            )}
+                            {canDelete(c) && (
+                              <button
+                                onClick={() => deleteComment(c.id)}
+                                className="inline-flex items-center gap-1 text-[10px] text-destructive/80 hover:text-destructive transition-sw"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                                Xóa
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      <p className="text-sm text-foreground/70 leading-relaxed">{c.text}</p>
-                      <button
-                        onClick={() => openReply(c.id)}
-                        className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-sw"
-                      >
-                        <CornerDownRight className="h-3 w-3" />
-                        {replyingTo === c.id ? "Hủy" : "Trả lời"}
-                      </button>
+
+                      {editingCommentId === c.id ? (
+                        <div className="mt-1">
+                          <textarea
+                            value={editInput}
+                            onChange={e => setEditInput(e.target.value)}
+                            className="w-full min-h-[70px] text-sm bg-secondary/50 rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-primary/25 text-foreground placeholder:text-muted-foreground/40 transition-sw"
+                          />
+                          <div className="mt-2 flex items-center gap-2">
+                            <button
+                              onClick={() => saveEditedComment(c.id)}
+                              disabled={!editInput.trim()}
+                              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 disabled:opacity-30 transition-sw"
+                            >
+                              Lưu
+                            </button>
+                            <button
+                              onClick={cancelEditComment}
+                              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary text-foreground text-xs font-medium hover:bg-secondary/70 transition-sw"
+                            >
+                              Hủy
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="text-sm text-foreground/70 leading-relaxed">{c.text}</p>
+                          <button
+                            onClick={() => openReply(c.id)}
+                            className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-sw"
+                          >
+                            <CornerDownRight className="h-3 w-3" />
+                            {replyingTo === c.id ? "Hủy" : "Trả lời"}
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -190,11 +324,60 @@ export default function Feedback() {
                         <div key={r.id} className="flex gap-2">
                           <Avatar name={r.author} size="sm" />
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-baseline gap-2 mb-0.5">
-                              <span className="text-xs font-semibold text-foreground/80">{r.author}</span>
-                              <span className="text-[10px] text-muted-foreground/40">{timeAgo(r.createdAt)}</span>
+                            <div className="flex items-center justify-between mb-0.5">
+                              <div className="flex items-baseline gap-2">
+                                <span className="text-xs font-semibold text-foreground/80">{r.author}</span>
+                                <span className="text-[10px] text-muted-foreground/40">{timeAgo(r.createdAt)}</span>
+                              </div>
+                              {(canEdit(r) || canDelete(r)) && (
+                                <div className="flex items-center gap-2">
+                                  {canEdit(r) && (
+                                    <button
+                                      onClick={() => startEditReply(c.id, r)}
+                                      className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-foreground transition-sw"
+                                    >
+                                      <Pencil className="h-3 w-3" />
+                                      Sửa
+                                    </button>
+                                  )}
+                                  {canDelete(r) && (
+                                    <button
+                                      onClick={() => deleteReply(c.id, r.id)}
+                                      className="inline-flex items-center gap-1 text-[10px] text-destructive/80 hover:text-destructive transition-sw"
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                      Xóa
+                                    </button>
+                                  )}
+                                </div>
+                              )}
                             </div>
-                            <p className="text-sm text-foreground/70 leading-relaxed">{r.text}</p>
+                            {editingReply?.commentId === c.id && editingReply.replyId === r.id ? (
+                              <div className="mt-1">
+                                <input
+                                  value={editReplyInput}
+                                  onChange={e => setEditReplyInput(e.target.value)}
+                                  className="w-full text-sm bg-secondary/50 rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-primary/25 text-foreground placeholder:text-muted-foreground/40 transition-sw"
+                                />
+                                <div className="mt-2 flex items-center gap-2">
+                                  <button
+                                    onClick={() => saveEditedReply(c.id, r.id)}
+                                    disabled={!editReplyInput.trim()}
+                                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 disabled:opacity-30 transition-sw"
+                                  >
+                                    Lưu
+                                  </button>
+                                  <button
+                                    onClick={cancelEditReply}
+                                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary text-foreground text-xs font-medium hover:bg-secondary/70 transition-sw"
+                                  >
+                                    Hủy
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-foreground/70 leading-relaxed">{r.text}</p>
+                            )}
                           </div>
                         </div>
                       ))}

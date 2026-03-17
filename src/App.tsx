@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom";
 import { onAuthStateChanged } from "firebase/auth";
@@ -33,8 +33,8 @@ const queryClient = new QueryClient();
 const UPDATE_LOG_STORAGE_KEY = "altrealm:update-log:hidden-version";
 const UPDATE_LOG = {
   // Change version whenever you publish a new update log message.
-  version: "2026-03-17-responsive-phone-ui",
-  message: "Sửa giao diện responsive điện thoại",
+  version: "2026-03-17-feedback-feature",
+  message: "Sửa giao diện responsive điện thoại. Thêm tính năng feedback.",
 };
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
