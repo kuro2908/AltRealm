@@ -22,6 +22,7 @@ import StoryEditor from "./pages/StoryEditor";
 import ReaderMode from "./pages/ReaderMode";
 import StoryExplore from "./pages/StoryExplore";
 import CommunityFeed from "./pages/CommunityFeed";
+import Feedback from "./pages/Feedback";
 import Settings from "./pages/Settings";
 import AdminPage from "./pages/AdminPage";
 import NotFound from "./pages/NotFound";
@@ -45,6 +46,7 @@ const router = createBrowserRouter([
   { path: "/", element: <Navigate to="/community" replace /> },
   { path: "/auth", element: <AuthPage /> },
   { path: "/community", element: <CommunityFeed /> },               // public
+  { path: "/feedback", element: <Feedback /> },                     // public
   { path: "/reader/:id", element: <ReaderMode /> },                  // public
   { path: "/explore/:id", element: <StoryExplore /> },               // public
   { path: "/dashboard", element: <PrivateRoute><Dashboard /></PrivateRoute> },

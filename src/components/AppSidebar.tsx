@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { BookOpen, Users, Settings, Plus, ChevronLeft, LogOut, Shield } from "lucide-react";
+import { BookOpen, Users, MessageSquare, Settings, Plus, ChevronLeft, LogOut, Shield } from "lucide-react";
 import { db } from "@/lib/utils";
 
 const navItems = [
   { label: "Truyện của tôi", icon: BookOpen, path: "/dashboard" },
   { label: "Cộng đồng", icon: Users, path: "/community" },
+  { label: "Góp ý", icon: MessageSquare, path: "/feedback" },
   { label: "Cài đặt", icon: Settings, path: "/settings" },
 ];
 

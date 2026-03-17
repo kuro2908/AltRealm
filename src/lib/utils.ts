@@ -31,6 +31,8 @@ function uid(): string {
   return user.uid;
 }
 
+const FEEDBACK_THREAD_ID = "feedback";
+
 export const db = {
   // ── Auth ──────────────────────────────────────────────────────────────────
   async login(email: string, password: string) {
@@ -156,6 +158,14 @@ export const db = {
 
   async saveComments(storyId: string, comments: any[]) {
     await setDoc(doc(firestore, "comments", storyId), { data: comments });
+  },
+
+  async getFeedback() {
+    return this.getComments(FEEDBACK_THREAD_ID);
+  },
+
+  async saveFeedback(comments: any[]) {
+    await this.saveComments(FEEDBACK_THREAD_ID, comments);
   },
 
   // ── Admin ─────────────────────────────────────────────────────────────────
