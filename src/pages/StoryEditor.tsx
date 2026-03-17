@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useParams, useBlocker } from "react-router-dom";
 import { db } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,6 +44,7 @@ const initialNodes: StoryNode[] = [{
 
 export default function StoryEditor() {
   const { id } = useParams();
+  const isMobile = useIsMobile();
   const [nodes, setNodes] = useState<StoryNode[]>([]);
   const [storyTitle, setStoryTitle] = useState("");
   const [loading, setLoading] = useState(true);
@@ -53,10 +55,12 @@ export default function StoryEditor() {
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [didAutoCenter, setDidAutoCenter] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const nodesRef = useRef(nodes);
   const panOffsetRef = useRef(panOffset);
+  const isMobileRef = useRef(isMobile);
   const pendingSelectRef = useRef<string | null>(null);
   const suppressCanvasClickRef = useRef(false);
   // Refs for auto-save (avoid stale closures in setInterval)
@@ -66,6 +70,7 @@ export default function StoryEditor() {
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   useEffect(() => { panOffsetRef.current = panOffset; }, [panOffset]);
   useEffect(() => { saveStatusRef.current = saveStatus; }, [saveStatus]);
+  useEffect(() => { isMobileRef.current = isMobile; }, [isMobile]);
 
   // Select pending node after nodes state updates
   useEffect(() => {
@@ -99,6 +104,9 @@ export default function StoryEditor() {
 
   useEffect(() => {
     let mounted = true;
+    setLoading(true);
+    setDidAutoCenter(false);
+    setPanOffset({ x: 0, y: 0 });
     const fetch = async () => {
       let data = await db.getStoryNodes(id || "new");
       if (!data) {
@@ -110,13 +118,37 @@ export default function StoryEditor() {
       if (mounted) {
         setNodes(data);
         setStoryTitle(story?.title || "Truyện mới");
-        setSelectedId(data[0]?.id || null);
+        setSelectedId(isMobileRef.current ? null : (data[0]?.id || null));
         setLoading(false);
       }
     };
     fetch();
     return () => { mounted = false; };
   }, [id]);
+
+  useEffect(() => {
+    if (isMobile) setSelectedId(null);
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (loading || didAutoCenter || nodes.length === 0 || !canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
+    const minX = Math.min(...nodes.map((n) => n.x));
+    const maxX = Math.max(...nodes.map((n) => n.x + NODE_W));
+    const minY = Math.min(...nodes.map((n) => n.y));
+    const maxY = Math.max(...nodes.map((n) => n.y + NODE_H));
+
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    setPanOffset({
+      x: rect.width / 2 - centerX,
+      y: Math.max(24, rect.height / 3 - centerY),
+    });
+    setDidAutoCenter(true);
+  }, [didAutoCenter, loading, nodes]);
 
   const handleSave = async () => {
     setSaveStatus("saving");
@@ -177,7 +209,7 @@ export default function StoryEditor() {
 
   // Single global event handler — all state reads go through refs to avoid stale closures
   useEffect(() => {
-    const onMove = (e: MouseEvent) => {
+    const onMove = (e: PointerEvent) => {
       const i = ix.current;
       if (i.type === "dragging") {
         const dx = e.clientX - i.startMx;
@@ -220,9 +252,9 @@ export default function StoryEditor() {
       }
     };
 
-    const onUp = (e: MouseEvent) => {
+    const onUp = (e: PointerEvent) => {
       const i = ix.current;
-      // If any drag happened, suppress the canvas click that fires after mouseup
+      // If any drag happened, suppress the canvas click that fires after pointerup
       if (i.moved) suppressCanvasClickRef.current = true;
 
       if (i.type === "dragging") {
@@ -262,28 +294,36 @@ export default function StoryEditor() {
       ix.current = { type: "idle", nodeId: "", startMx: 0, startMy: 0, startNx: 0, startNy: 0, panOx: 0, panOy: 0, moved: false };
     };
 
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
     return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
     };
   }, []);
 
-  const handleNodeMouseDown = (e: React.MouseEvent, node: StoryNode) => {
+  const handleNodePointerDown = (e: React.PointerEvent, node: StoryNode) => {
+    if (e.button !== 0) return;
     if ((e.target as HTMLElement).closest("[data-port]")) return;
+    if (e.pointerType !== "mouse") e.preventDefault();
     e.stopPropagation();
     setDraggingNodeId(node.id);
     ix.current = { type: "dragging", nodeId: node.id, startMx: e.clientX, startMy: e.clientY, startNx: node.x, startNy: node.y, panOx: 0, panOy: 0, moved: false };
   };
 
-  const handlePortMouseDown = (e: React.MouseEvent, node: StoryNode) => {
+  const handlePortPointerDown = (e: React.PointerEvent, node: StoryNode) => {
+    if (e.button !== 0) return;
+    if (e.pointerType !== "mouse") e.preventDefault();
     e.stopPropagation();
     ix.current = { type: "connecting", nodeId: node.id, startMx: e.clientX, startMy: e.clientY, startNx: 0, startNy: 0, panOx: 0, panOy: 0, moved: false };
   };
 
-  const handleCanvasMouseDown = (e: React.MouseEvent) => {
+  const handleCanvasPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
     if ((e.target as HTMLElement).closest("[data-node]")) return;
+    if (e.pointerType !== "mouse") e.preventDefault();
     ix.current = { type: "panning", nodeId: "", startMx: e.clientX, startMy: e.clientY, startNx: 0, startNy: 0, panOx: panOffset.x, panOy: panOffset.y, moved: false };
   };
 
@@ -319,34 +359,37 @@ export default function StoryEditor() {
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden">
       {/* Header */}
-      <div className="fixed top-0 left-0 right-0 h-12 bg-card z-30 flex items-center justify-between px-4" style={{ boxShadow: "0 1px 0 0 hsl(var(--border))" }}>
-        <div className="flex items-center gap-3">
-          <Link to="/dashboard" className="p-1.5 rounded-md hover:bg-secondary transition-sw text-muted-foreground">
+      <div className="fixed top-0 left-0 right-0 h-12 bg-card z-30 flex items-center justify-between gap-2 px-2 sm:px-4" style={{ boxShadow: "0 1px 0 0 hsl(var(--border))" }}>
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-3">
+          <Link to="/dashboard" className="shrink-0 p-1.5 rounded-md hover:bg-secondary transition-sw text-muted-foreground">
             <ArrowLeft className="h-4 w-4" />
           </Link>
           <input
             value={storyTitle}
             onChange={(e) => { setStoryTitle(e.target.value); setSaveStatus("unsaved"); }}
-            className="text-sm font-semibold text-foreground bg-transparent border-none outline-none hover:bg-secondary focus:bg-secondary rounded px-1.5 py-0.5 transition-sw min-w-0 max-w-[240px]"
+            className="flex-1 min-w-0 text-sm font-semibold text-foreground bg-transparent border-none outline-none hover:bg-secondary focus:bg-secondary rounded px-1.5 py-0.5 transition-sw truncate sm:max-w-[240px]"
             placeholder="Tên truyện..."
           />
-          <div className="flex items-center gap-1.5 ml-2">
+          <div className="flex items-center gap-1 sm:gap-1.5 ml-1 sm:ml-2 shrink-0">
             <span className={`w-2 h-2 rounded-full ${saveStatus === "saved" ? "bg-primary" : saveStatus === "saving" ? "bg-muted-foreground animate-pulse" : "bg-destructive animate-pulse"}`} />
-            <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-widest">
+            <span className="hidden sm:inline text-[10px] text-muted-foreground font-mono uppercase tracking-widest">
               {saveStatus === "saved" ? "Đã lưu" : saveStatus === "saving" ? "Đang lưu" : "Chưa lưu"}
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Link to={`/reader/${id}`} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm text-muted-foreground hover:bg-secondary transition-sw">
-            <Eye className="h-3.5 w-3.5" /> Xem trước
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+          <Link to={`/reader/${id}`} title="Xem trước" className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-md text-sm text-muted-foreground hover:bg-secondary transition-sw whitespace-nowrap">
+            <Eye className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Xem trước</span>
           </Link>
           <button
             onClick={handleSave}
             disabled={saveStatus === "saving"}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-foreground text-background text-sm font-medium hover:opacity-90 transition-sw disabled:opacity-50"
+            title={saveStatus === "saving" ? "Đang lưu..." : "Lưu"}
+            className="flex items-center gap-1 px-2.5 sm:px-4 py-1.5 rounded-md sm:rounded-full bg-foreground text-background text-sm font-medium hover:opacity-90 transition-sw disabled:opacity-50 whitespace-nowrap"
           >
-            <Save className="h-3.5 w-3.5" /> {saveStatus === "saving" ? "Đang lưu..." : "Lưu"}
+            <Save className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">{saveStatus === "saving" ? "Đang lưu..." : "Lưu"}</span>
           </button>
         </div>
       </div>
@@ -354,9 +397,9 @@ export default function StoryEditor() {
       {/* Canvas */}
       <div
         ref={canvasRef}
-        className="flex-1 mt-12 canvas-grid relative overflow-hidden select-none"
+        className="flex-1 mt-12 canvas-grid relative overflow-hidden select-none touch-none"
         style={{ cursor: wire ? "crosshair" : draggingNodeId ? "grabbing" : "grab" }}
-        onMouseDown={handleCanvasMouseDown}
+        onPointerDown={handleCanvasPointerDown}
         onClick={handleCanvasClick}
       >
         {/* FIX: overflow="visible" so bezier curves aren't clipped by the SVG boundary */}
@@ -416,7 +459,7 @@ export default function StoryEditor() {
                   : "shadow-node hover:shadow-node-hover"
                 }`}
                 style={{ left: node.x, top: node.y, width: NODE_W, cursor: draggingNodeId === node.id ? "grabbing" : "grab" }}
-                onMouseDown={(e) => handleNodeMouseDown(e, node)}
+                onPointerDown={(e) => handleNodePointerDown(e, node)}
               >
                 {(isStart || isEnding) && (
                   <div className="absolute -top-2.5 left-2 flex gap-1 z-10">
@@ -456,7 +499,7 @@ export default function StoryEditor() {
                       ? "opacity-100 pointer-events-auto"
                       : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto"
                   }`}
-                  onMouseDown={(e) => handlePortMouseDown(e, node)}
+                  onPointerDown={(e) => handlePortPointerDown(e, node)}
                   title="Click: thêm nhánh mới · Kéo: nối tới ô khác"
                 >
                   <Plus className="h-3 w-3" />
@@ -471,14 +514,19 @@ export default function StoryEditor() {
       <AnimatePresence>
         {selectedNode && (
           <motion.div
-            initial={{ x: 400 }}
-            animate={{ x: 0 }}
-            exit={{ x: 400 }}
+            key={isMobile ? "mobile-panel" : "desktop-panel"}
+            initial={isMobile ? { y: "100%" } : { x: 400 }}
+            animate={isMobile ? { y: 0 } : { x: 0 }}
+            exit={isMobile ? { y: "100%" } : { x: 400 }}
             transition={transition}
-            className="w-[400px] h-[calc(100vh-48px)] mt-12 bg-card overflow-y-auto flex-shrink-0"
-            style={{ boxShadow: "-1px 0 0 0 hsl(var(--border))" }}
+            className={
+              isMobile
+                ? "fixed inset-x-0 top-12 bottom-0 z-40 bg-card overflow-y-auto"
+                : "w-[400px] h-[calc(100vh-48px)] mt-12 bg-card overflow-y-auto flex-shrink-0"
+            }
+            style={{ boxShadow: isMobile ? "0 -1px 0 0 hsl(var(--border))" : "-1px 0 0 0 hsl(var(--border))" }}
           >
-            <div className="p-6">
+            <div className={isMobile ? "p-4" : "p-6"}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-mono tracking-widest uppercase text-muted-foreground tabular-nums">

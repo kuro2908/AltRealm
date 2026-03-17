@@ -27,7 +27,8 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
       {/* Mobile hamburger button */}
       <button
-        className="fixed top-3.5 left-3.5 z-20 p-2 rounded-lg bg-card border border-border/60 shadow-sm lg:hidden"
+        className="fixed left-3.5 bottom-4 z-20 p-2 rounded-lg bg-card border border-border/60 shadow-sm lg:hidden"
+        style={{ bottom: "max(1rem, env(safe-area-inset-bottom))" }}
         onClick={() => setMobileOpen(true)}
       >
         <Menu className="h-4 w-4 text-muted-foreground" />
